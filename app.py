@@ -201,9 +201,9 @@ def api_generate_itinerary():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    print(f"==================================================")
-    print(f"✈️  TravelPlanner Capstone Server Starting...")
-    print(f"🌐 Local URL: http://127.0.0.1:{port}")
-    print(f"🔑 Gemini AI Status: {'Configured (Live AI)' if is_api_key_configured() else 'Demo Mode (Offline Fallback)'}")
-    print(f"==================================================")
-    app.run(host="0.0.0.0", port=port, debug=True)
+    print("==================================================")
+    print("TravelPlanner Capstone Server Starting...")
+    print(f"Local URL: http://127.0.0.1:{port}")
+    print(f"Gemini AI Status: {'Configured (Live AI)' if is_api_key_configured() else 'Demo Mode (Offline Fallback)'}")
+    print("==================================================")
+    app.run(host="0.0.0.0", port=port, debug=False)

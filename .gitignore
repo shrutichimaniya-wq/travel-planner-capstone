@@ -1,0 +1,30 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Local Environment Variables (Keep secrets out of GitHub!)
+.env
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Deployment builds
+.vercel/
+dist/
+build/

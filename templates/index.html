@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WanderPlan AI | Personalized Travel Itinerary Planner</title>
+    <!-- Google Fonts: Inter and Plus Jakarta Sans -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+    <!-- Main Stylesheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Favicon / Meta -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%3E%3Ctext y=%2226%22 font-size=%2224%22>✈️</text></svg>">
+</head>
+<body>
+
+    <!-- Top Navigation Bar -->
+    <header class="navbar" id="navbar">
+        <div class="nav-container">
+            <a href="#hero" class="nav-brand">
+                <span class="brand-icon">✈️</span>
+                <span class="brand-text">WanderPlan<span class="brand-accent">.AI</span></span>
+            </a>
+
+            <nav class="nav-menu" id="navMenu">
+                <a href="#planner-section" class="nav-link">Trip Planner</a>
+                <a href="#destinations-section" class="nav-link">Popular Destinations</a>
+                <a href="#saved-trips-modal" class="nav-link" id="openSavedTripsBtn">Saved Trips <span class="badge-count" id="savedTripsCount">0</span></a>
+                <a href="#capstone-modal" class="nav-link" id="openCapstoneModalBtn">Capstone Info</a>
+            </nav>
+
+            <div class="nav-status-wrap">
+                <div class="ai-status-pill {{ 'status-live' if api_configured else 'status-demo' }}" id="aiStatusPill" title="{{ 'Gemini AI API Key is active' if api_configured else 'Running in Curated Demo Mode (No API key set)' }}">
+                    <span class="status-dot"></span>
+                    <span class="status-label">{{ 'Live Gemini AI' if api_configured else 'Demo Mode' }}</span>
+                </div>
+                <button class="mobile-toggle" id="mobileToggle" aria-label="Toggle Navigation Menu">
+                    <span></span><span></span><span></span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main>
+        <!-- Hero Section -->
+        <section class="hero-section" id="hero">
+            <div class="hero-overlay"></div>
+            <div class="hero-content">
+                <div class="hero-badge">
+                    <span>✨ AI-Powered Personalized Travel Planning</span>
+                </div>
+                <h1 class="hero-title">Your Next Journey,<br><span class="hero-gradient">Tailored to Perfection</span></h1>
+                <p class="hero-subtitle">
+                    Generate intelligent, day-by-day customized travel itineraries designed around your budget, interests, pace, and travel companions in seconds.
+                </p>
+                <div class="hero-actions">
+                    <a href="#planner-section" class="btn btn-primary btn-lg">Plan My Trip Now 🚀</a>
+                    <a href="#destinations-section" class="btn btn-secondary btn-lg">Explore Sample Destinations</a>
+                </div>
+
+                <!-- Live Quick Stats -->
+                <div class="hero-stats">
+                    <div class="stat-item">
+                        <span class="stat-number">100%</span>
+                        <span class="stat-label">Personalized Routes</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number">Multi-Day</span>
+                        <span class="stat-label">Daily Budget Estimates</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number">7+</span>
+                        <span class="stat-label">Global Currencies</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Mode Notification Banner (if running in Demo mode) -->
+        <div class="system-banner {{ '' if api_configured else 'banner-visible' }}" id="systemBanner">
+            <div class="banner-inner">
+                <div class="banner-icon">💡</div>
+                <div class="banner-text">
+                    <strong>Demo Mode Active:</strong> You are using our offline curated itinerary database. To enable real-time Gemini AI generation, provide a free <code>GEMINI_API_KEY</code> in your server's <code>.env</code> file.
+                </div>
+                <button class="banner-close" id="closeBannerBtn" aria-label="Dismiss banner">&times;</button>
+            </div>
+        </div>
+
+        <!-- Trip Planner Form Section -->
+        <section class="planner-section" id="planner-section">
+            <div class="section-container">
+                <div class="section-header text-center">
+                    <span class="section-eyebrow">Custom Preferences</span>
+                    <h2 class="section-title">Design Your Ideal Itinerary</h2>
+                    <p class="section-desc">Fill in your travel preferences below. Our engine will synthesize an authentic day-by-day plan with estimated expenses.</p>
+                </div>
+
+                <div class="planner-card">
+                    <form id="tripPlannerForm" novalidate>
+                        
+                        <!-- Row 1: Destination -->
+                        <div class="form-group destination-group">
+                            <label for="destinationInput" class="form-label">
+                                <span class="label-icon">📍</span> Where do you want to go?
+                            </label>
+                            <div class="input-with-icon">
+                                <input 
+                                    type="text" 
+                                    id="destinationInput" 
+                                    name="destination" 
+                                    class="form-control" 
+                                    placeholder="e.g., Tokyo, Paris, Bali, Rome, Goa, New York..." 
+                                    required
+                                    minlength="2"
+                                    maxlength="80"
+                                    autocomplete="off"
+                                >
+                                <span class="input-icon-right" id="clearDestBtn" title="Clear input" style="display:none;">&times;</span>
+                            </div>
+                            <div class="quick-destination-chips">
+                                <span class="chips-label">Quick select:</span>
+                                <button type="button" class="chip-btn" data-dest="Tokyo" data-days="5">Tokyo 🇯🇵</button>
+                                <button type="button" class="chip-btn" data-dest="Paris" data-days="4">Paris 🇫🇷</button>
+                                <button type="button" class="chip-btn" data-dest="Bali" data-days="6">Bali 🇮🇩</button>
+                                <button type="button" class="chip-btn" data-dest="Goa" data-days="4">Goa 🇮🇳</button>
+                                <button type="button" class="chip-btn" data-dest="Rome" data-days="4">Rome 🇮🇹</button>
+                                <button type="button" class="chip-btn" data-dest="New York City" data-days="5">New York 🇺🇸</button>
+                            </div>
+                            <div class="form-feedback" id="destFeedback"></div>
+                        </div>
+
+                        <!-- Row 2: Duration & Travelers -->
+                        <div class="form-row form-grid-2">
+                            <!-- Trip Duration -->
+                            <div class="form-group">
+                                <label for="durationDays" class="form-label">
+                                    <span class="label-icon">🗓️</span> Trip Duration: 
+                                    <span class="highlight-val" id="durationDaysDisplay">4 Days</span>
+                                </label>
+                                <div class="slider-control-wrap">
+                                    <input 
+                                        type="range" 
+                                        id="durationDays" 
+                                        name="duration_days" 
+                                        min="1" 
+                                        max="14" 
+                                        value="4" 
+                                        class="range-slider"
+                                    >
+                                    <div class="slider-labels">
+                                        <span>1 Day</span>
+                                        <span>7 Days</span>
+                                        <span>14 Days</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Number of Travelers -->
+                            <div class="form-group">
+                                <label class="form-label">
+                                    <span class="label-icon">👥</span> Who is Traveling?
+                                </label>
+                                <div class="traveler-selector" id="travelerSelector">
+                                    <button type="button" class="traveler-pill active" data-type="solo" data-count="1">
+                                        <span class="pill-icon">🎒</span> Solo (1)
+                                    </button>
+                                    <button type="button" class="traveler-pill" data-type="couple" data-count="2">
+                                        <span class="pill-icon">💑</span> Couple (2)
+                                    </button>
+                                    <button type="button" class="traveler-pill" data-type="family" data-count="3">
+                                        <span class="pill-icon">👨‍👩‍👧</span> Family (3)
+                                    </button>
+                                    <button type="button" class="traveler-pill" data-type="group" data-count="4">
+                                        <span class="pill-icon">👥</span> Group (4+)
+                                    </button>
+                                </div>
+                                <input type="hidden" id="travelersCount" name="travelers_count" value="1">
+                            </div>
+                        </div>
+
+                        <!-- Row 3: Budget Tier & Currency -->
+                        <div class="form-row form-grid-2">
+                            <!-- Budget Tier -->
+                            <div class="form-group">
+                                <label class="form-label">
+                                    <span class="label-icon">💰</span> Travel Budget Style
+                                </label>
+                                <div class="budget-selector" id="budgetSelector">
+                                    <button type="button" class="budget-card" data-tier="budget">
+                                        <div class="budget-icon">🪙</div>
+                                        <div class="budget-title">Budget</div>
+                                        <div class="budget-desc">Hostels, local transit, street foods</div>
+                                    </button>
+                                    <button type="button" class="budget-card active" data-tier="moderate">
+                                        <div class="budget-icon">💳</div>
+                                        <div class="budget-title">Moderate</div>
+                                        <div class="budget-desc">3-star hotels, cafes, standard tours</div>
+                                    </button>
+                                    <button type="button" class="budget-card" data-tier="luxury">
+                                        <div class="budget-icon">💎</div>
+                                        <div class="budget-title">Luxury</div>
+                                        <div class="budget-desc">4/5-star stays, fine dining, private tours</div>
+                                    </button>
+                                </div>
+                                <input type="hidden" id="budgetTier" name="budget_tier" value="moderate">
+                            </div>
+
+                            <!-- Currency Selection & Pace -->
+                            <div class="form-group">
+                                <div class="sub-form-group">
+                                    <label for="currencySelect" class="form-label">
+                                        <span class="label-icon">💱</span> Preferred Currency
+                                    </label>
+                                    <select id="currencySelect" name="currency" class="form-control form-select">
+                                        <option value="USD" selected>USD ($) - US Dollar</option>
+                                        <option value="INR">INR (₹) - Indian Rupee</option>
+                                        <option value="EUR">EUR (€) - Euro</option>
+                                        <option value="GBP">GBP (£) - British Pound</option>
+                                        <option value="JPY">JPY (¥) - Japanese Yen</option>
+                                        <option value="AUD">AUD (A$) - Australian Dollar</option>
+                                        <option value="CAD">CAD (C$) - Canadian Dollar</option>
+                                    </select>
+                                </div>
+
+                                <div class="sub-form-group mt-3">
+                                    <label class="form-label">
+                                        <span class="label-icon">⚡</span> Preferred Travel Pace
+                                    </label>
+                                    <div class="pace-selector" id="paceSelector">
+                                        <button type="button" class="pace-pill" data-pace="relaxed">
+                                            ☕ Relaxed
+                                        </button>
+                                        <button type="button" class="pace-pill active" data-pace="moderate">
+                                            🚶 Balanced
+                                        </button>
+                                        <button type="button" class="pace-pill" data-pace="fast-paced">
+                                            ⚡ Fast-Paced
+                                        </button>
+                                    </div>
+                                    <input type="hidden" id="travelPace" name="pace" value="moderate">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Row 4: Travel Interests (Multi-select) -->
+                        <div class="form-group">
+                            <label class="form-label">
+                                <span class="label-icon">🎯</span> What are your key interests? <span class="label-hint">(Select at least one)</span>
+                            </label>
+                            <div class="interests-grid" id="interestsGrid">
+                                <label class="interest-checkbox checked">
+                                    <input type="checkbox" name="interests" value="Culture & Heritage" checked>
+                                    <span class="interest-box">🏛️ Culture & Heritage</span>
+                                </label>
+                                <label class="interest-checkbox checked">
+                                    <input type="checkbox" name="interests" value="Food & Dining" checked>
+                                    <span class="interest-box">🍜 Food & Dining</span>
+                                </label>
+                                <label class="interest-checkbox checked">
+                                    <input type="checkbox" name="interests" value="Sightseeing" checked>
+                                    <span class="interest-box">📸 Sightseeing</span>
+                                </label>
+                                <label class="interest-checkbox">
+                                    <input type="checkbox" name="interests" value="Adventure & Outdoors">
+                                    <span class="interest-box">🧗 Adventure & Outdoors</span>
+                                </label>
+                                <label class="interest-checkbox">
+                                    <input type="checkbox" name="interests" value="Nature & Wildlife">
+                                    <span class="interest-box">🌿 Nature & Wildlife</span>
+                                </label>
+                                <label class="interest-checkbox">
+                                    <input type="checkbox" name="interests" value="Relaxation & Wellness">
+                                    <span class="interest-box">🏖️ Relaxation & Wellness</span>
+                                </label>
+                                <label class="interest-checkbox">
+                                    <input type="checkbox" name="interests" value="Shopping & Markets">
+                                    <span class="interest-box">🛍️ Shopping & Markets</span>
+                                </label>
+                                <label class="interest-checkbox">
+                                    <input type="checkbox" name="interests" value="Nightlife & Bars">
+                                    <span class="interest-box">🌙 Nightlife & Social</span>
+                                </label>
+                            </div>
+                            <div class="form-feedback" id="interestsFeedback"></div>
+                        </div>
+
+                        <!-- Submit Button & Loader -->
+                        <div class="form-actions text-center">
+                            <button type="submit" class="btn btn-primary btn-xl" id="generateBtn">
+                                <span class="btn-text">✨ Generate Personalized Itinerary</span>
+                                <span class="btn-spinner" style="display: none;"></span>
+                            </button>
+                            <p class="form-footnote">
+                                🔒 Secure server-side processing • Clear unverified estimate disclosures • Instant generation
+                            </p>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- Loading Skeleton State -->
+        <section class="loading-section" id="loadingSection" style="display: none;">
+            <div class="section-container text-center">
+                <div class="spinner-large"></div>
+                <h3 class="loading-title" id="loadingTitle">Crafting Your Personalized Itinerary...</h3>
+                <p class="loading-subtitle" id="loadingSubtitle">Synthesizing local landmarks, calculating budget approximations, and scheduling daily routes.</p>
+                <div class="skeleton-cards">
+                    <div class="skeleton-card skeleton-pulse"></div>
+                    <div class="skeleton-card skeleton-pulse"></div>
+                    <div class="skeleton-card skeleton-pulse"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Results / Itinerary Presentation Section -->
+        <section class="results-section" id="resultsSection" style="display: none;">
+            <div class="section-container">
+                
+                <!-- Result Header & Actions Toolbar -->
+                <div class="result-header-card">
+                    <div class="result-header-top">
+                        <div class="result-title-wrap">
+                            <div class="result-mode-badge" id="resultModeBadge">
+                                <span class="dot"></span>
+                                <span id="resultModeText">Curated Demo Mode</span>
+                            </div>
+                            <h2 class="result-trip-title" id="resultTripTitle">Trip Itinerary</h2>
+                            <p class="result-trip-meta" id="resultTripMeta">Destination • Duration • Travelers</p>
+                        </div>
+
+                        <div class="result-actions-bar">
+                            <button class="btn btn-outline" id="editPreferencesBtn" title="Modify your preferences">
+                                ✏️ Edit Preferences
+                            </button>
+                            <button class="btn btn-outline" id="regenerateBtn" title="Regenerate this itinerary">
+                                🔄 Regenerate
+                            </button>
+                            <button class="btn btn-outline" id="saveTripBtn" title="Save trip to browser favorites">
+                                ⭐ Save Trip
+                            </button>
+                            <button class="btn btn-primary" id="printTripBtn" title="Print or save as PDF">
+                                🖨️ Print / PDF
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Mode Explanation Banner -->
+                    <div class="mode-explanation-box" id="modeExplanationBox">
+                        <span class="info-icon">ℹ️</span>
+                        <span id="modeExplanationText">Explanation text</span>
+                    </div>
+                </div>
+
+                <!-- Trip Overview & Practical Information -->
+                <div class="overview-grid">
+                    <div class="overview-card main-overview">
+                        <div class="card-header-icon">🧭</div>
+                        <h3>Trip Overview</h3>
+                        <p id="overviewText">Destination overview...</p>
+                    </div>
+
+                    <div class="overview-card">
+                        <div class="card-header-icon">🌤️</div>
+                        <h3>Best Time to Visit</h3>
+                        <p id="bestTimeText">Seasonal recommendations...</p>
+                    </div>
+
+                    <div class="overview-card">
+                        <div class="card-header-icon">🎒</div>
+                        <h3>Packing Checklist</h3>
+                        <p id="packingText">Packing suggestions...</p>
+                    </div>
+                </div>
+
+                <!-- Estimated Budget Breakdown Card -->
+                <div class="budget-breakdown-card" id="budgetBreakdownCard">
+                    <div class="budget-card-header">
+                        <div>
+                            <span class="budget-label">Estimated Trip Budget Breakdown</span>
+                            <div class="budget-grand-total">
+                                <span class="currency-symbol" id="budgetCurrencySym">$</span>
+                                <span class="total-amount" id="budgetGrandTotal">0</span>
+                                <span class="total-caption">Estimated Total (<span id="budgetTierName">Moderate</span>)</span>
+                            </div>
+                        </div>
+                        <div class="budget-daily-badge">
+                            Avg. <strong id="budgetDailyAvg">$0</strong> / day
+                        </div>
+                    </div>
+
+                    <div class="budget-categories-grid">
+                        <div class="budget-cat-item">
+                            <div class="cat-icon">🏨</div>
+                            <div class="cat-details">
+                                <span class="cat-name">Accommodation</span>
+                                <span class="cat-amount" id="budgetStayTotal">$0</span>
+                            </div>
+                        </div>
+                        <div class="budget-cat-item">
+                            <div class="cat-icon">🍽️</div>
+                            <div class="cat-details">
+                                <span class="cat-name">Food & Dining</span>
+                                <span class="cat-amount" id="budgetFoodTotal">$0</span>
+                            </div>
+                        </div>
+                        <div class="budget-cat-item">
+                            <div class="cat-icon">🎟️</div>
+                            <div class="cat-details">
+                                <span class="cat-name">Sightseeing & Tours</span>
+                                <span class="cat-amount" id="budgetActivitiesTotal">$0</span>
+                            </div>
+                        </div>
+                        <div class="budget-cat-item">
+                            <div class="cat-icon">🚕</div>
+                            <div class="cat-details">
+                                <span class="cat-name">Local Transport</span>
+                                <span class="cat-amount" id="budgetTransportTotal">$0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="budget-disclaimer-bar">
+                        <span class="badge-tag">Estimated Expense</span>
+                        <span id="budgetDisclaimerText">Costs are rule-based approximations. Flights, visas, and shopping are not included. Local rates vary seasonally.</span>
+                    </div>
+                </div>
+
+                <!-- Day-by-Day Itinerary Schedule -->
+                <div class="itinerary-schedule-wrap">
+                    <div class="schedule-header">
+                        <h3>📅 Day-by-Day Detailed Schedule</h3>
+                        <div class="schedule-view-tabs" id="dayFilterTabs">
+                            <!-- Populated dynamically: "All Days", "Day 1", "Day 2", etc. -->
+                        </div>
+                    </div>
+
+                    <div class="days-container" id="daysContainer">
+                        <!-- Populated dynamically with Day cards and Activities -->
+                    </div>
+                </div>
+
+                <!-- Ethical AI Disclaimer Card -->
+                <div class="ethical-ai-card">
+                    <div class="disclaimer-header">
+                        <span class="disclaimer-icon">⚠️</span>
+                        <h4>Important Ethical AI & Accuracy Disclosures</h4>
+                    </div>
+                    <ul class="disclaimer-list" id="disclaimerList">
+                        <li>All costs, timings, and schedules are approximate estimates synthesized for trip planning and budgeting.</li>
+                        <li>Live ticket availability, real-time weather conditions, and seasonal operating hours are unverified and must be confirmed directly with local authorities or venues.</li>
+                        <li>Prices and transit routes are subject to currency fluctuations, local holidays, and seasonal variations.</li>
+                    </ul>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- Popular Sample Destinations Section -->
+        <section class="destinations-section" id="destinations-section">
+            <div class="section-container">
+                <div class="section-header text-center">
+                    <span class="section-eyebrow">Inspiration</span>
+                    <h2 class="section-title">Popular Destinations</h2>
+                    <p class="section-desc">Click any destination card below to immediately populate your trip planner.</p>
+                </div>
+
+                <div class="destinations-grid" id="destinationsGrid">
+                    <!-- Populated dynamically via /api/sample-destinations -->
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Saved Trips Modal -->
+    <div class="modal-backdrop" id="savedTripsModal" style="display: none;">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3>⭐ Saved Itineraries</h3>
+                <button class="modal-close" id="closeSavedTripsModalBtn">&times;</button>
+            </div>
+            <div class="modal-body" id="savedTripsList">
+                <p class="empty-state">No saved itineraries yet. Generate a trip and click "Save Trip" to store it locally in your browser.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Capstone Documentation Modal -->
+    <div class="modal-backdrop" id="capstoneModal" style="display: none;">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-header">
+                <h3>🎓 Capstone Project Overview</h3>
+                <button class="modal-close" id="closeCapstoneModalBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="capstone-info-content">
+                    <h4>Personalized Travel Itinerary Planner</h4>
+                    <p><strong>Program:</strong> B.Tech Capstone Project for Skill Wallet</p>
+                    <p><strong>Architecture:</strong> Python (Flask REST API) + Responsive HTML5/CSS3/Vanilla JS + Google Gemini AI Engine.</p>
+                    
+                    <h5>Key Engineering Principles:</h5>
+                    <ul>
+                        <li><strong>Secure API Key Handling:</strong> Gemini API keys are strictly kept on the server inside <code>.env</code> and never exposed to the client.</li>
+                        <li><strong>Transparent Demo Fallback:</strong> If no API key is provided, the application runs on a curated offline database and clearly labels itself as "Demo Mode".</li>
+                        <li><strong>Input Validation:</strong> Server-side bounds checking for trip duration (1-14 days), travelers (1-20), and sanitized destination names.</li>
+                        <li><strong>Responsible AI:</strong> Activity costs and schedules are clearly badged as unverified estimates to prevent user misinformation.</li>
+                    </ul>
+
+                    <h5>Local Windows Run:</h5>
+                    <code>python app.py</code>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-container">
+            <div class="footer-col">
+                <div class="nav-brand">
+                    <span class="brand-icon">✈️</span>
+                    <span class="brand-text">WanderPlan<span class="brand-accent">.AI</span></span>
+                </div>
+                <p class="footer-tagline">Intelligent, personalized travel itinerary planning for modern explorers.</p>
+            </div>
+            <div class="footer-col">
+                <h5>Capstone Tech Stack</h5>
+                <ul class="footer-links">
+                    <li>Python 3.14 & Flask 3.1</li>
+                    <li>Google Gemini AI REST Engine</li>
+                    <li>HTML5 Semantic Architecture</li>
+                    <li>Responsive CSS3 Variables</li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h5>Skill Wallet Capstone</h5>
+                <p class="footer-copy">Designed for B.Tech Capstone Submission • Responsive Mobile/Tablet/Desktop Layout</p>
+            </div>
+        </div>
+        <div class="footer-bottom text-center">
+            <p>&copy; 2026 WanderPlan AI. Capstone Project. All estimates are for planning purposes only.</p>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

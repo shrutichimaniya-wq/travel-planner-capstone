@@ -1,12 +1,16 @@
 /**
  * WanderPlan AI - Application Controller
- * Manages form interactions, itinerary rendering, budget display, and local storage.
+ * Manages form interactions, itinerary rendering, Leaflet maps,
+ * Open-Meteo weather display, destination search, PDF export, and local storage.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Current active itinerary state in memory
+    // Current active state in memory
     let currentItinerary = null;
     let savedTrips = [];
+    let allDestinations = [];
+    let leafletMapInstance = null;
+    let mapMarkersLayer = null;
 
     // DOM Elements - Navigation & System
     const navMenu = document.getElementById('navMenu');
@@ -37,14 +41,29 @@ document.addEventListener('DOMContentLoaded', () => {
     const loadingSection = document.getElementById('loadingSection');
     const resultsSection = document.getElementById('resultsSection');
     const destinationsGrid = document.getElementById('destinationsGrid');
+    const destSearchInput = document.getElementById('destSearchInput');
+    const destTabBtns = document.querySelectorAll('.dest-tab-btn');
 
-    // DOM Elements - Results Details
+    // DOM Elements - Results Header & Mode
     const resultModeBadge = document.getElementById('resultModeBadge');
     const resultModeText = document.getElementById('resultModeText');
     const resultTripTitle = document.getElementById('resultTripTitle');
     const resultTripMeta = document.getElementById('resultTripMeta');
     const modeExplanationBox = document.getElementById('modeExplanationBox');
     const modeExplanationText = document.getElementById('modeExplanationText');
+
+    // DOM Elements - Weather Widget
+    const weatherCard = document.getElementById('weatherCard');
+    const weatherIcon = document.getElementById('weatherIcon');
+    const weatherTemp = document.getElementById('weatherTemp');
+    const weatherCondition = document.getElementById('weatherCondition');
+    const weatherFeelsLike = document.getElementById('weatherFeelsLike');
+    const weatherHumidity = document.getElementById('weatherHumidity');
+    const weatherWind = document.getElementById('weatherWind');
+    const weatherRain = document.getElementById('weatherRain');
+    const forecastStrip = document.getElementById('forecastStrip');
+
+    // DOM Elements - Overview Details
     const overviewText = document.getElementById('overviewText');
     const bestTimeText = document.getElementById('bestTimeText');
     const packingText = document.getElementById('packingText');
@@ -60,18 +79,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const budgetTransportTotal = document.getElementById('budgetTransportTotal');
     const budgetDisclaimerText = document.getElementById('budgetDisclaimerText');
 
-    // DOM Elements - Schedule & Days
+    // DOM Elements - Schedule, Map & Disclaimers
     const dayFilterTabs = document.getElementById('dayFilterTabs');
     const daysContainer = document.getElementById('daysContainer');
     const disclaimerList = document.getElementById('disclaimerList');
+    const resetMapBtn = document.getElementById('resetMapBtn');
 
     // DOM Elements - Actions
     const editPreferencesBtn = document.getElementById('editPreferencesBtn');
     const regenerateBtn = document.getElementById('regenerateBtn');
     const saveTripBtn = document.getElementById('saveTripBtn');
+    const downloadPdfBtn = document.getElementById('downloadPdfBtn');
     const printTripBtn = document.getElementById('printTripBtn');
 
-    // DOM Elements - Modals
+    // DOM Elements - Modals & Toasts
     const savedTripsModal = document.getElementById('savedTripsModal');
     const openSavedTripsBtn = document.getElementById('openSavedTripsBtn');
     const closeSavedTripsModalBtn = document.getElementById('closeSavedTripsModalBtn');
@@ -82,6 +103,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const openCapstoneModalBtn = document.getElementById('openCapstoneModalBtn');
     const closeCapstoneModalBtn = document.getElementById('closeCapstoneModalBtn');
 
+    const toastNotification = document.getElementById('toastNotification');
+    const toastIcon = document.getElementById('toastIcon');
+    const toastMessage = document.getElementById('toastMessage');
+
     // =========================================================================
     // 1. Initialization
     // =========================================================================
@@ -91,7 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setupEventListeners();
         loadSavedTrips();
         await verifyBackendStatus();
-        await loadSampleDestinations();
+        await loadAllDestinations();
     }
 
     async function verifyBackendStatus() {
@@ -108,39 +133,148 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function loadSampleDestinations() {
-        const samples = await window.API.getSampleDestinations();
+    // =========================================================================
+    // 2. Destination Explorer (Cards, Search & Filter)
+    // =========================================================================
+    async function loadAllDestinations() {
+        allDestinations = await window.API.getSampleDestinations();
+        renderDestinationCards(allDestinations);
+    }
+
+    function renderDestinationCards(destinations) {
         if (!destinationsGrid) return;
         destinationsGrid.innerHTML = '';
 
-        samples.forEach(dest => {
-            const card = document.createElement('div');
-            card.className = 'dest-card';
-            card.innerHTML = `
-                <div class="dest-card-top">
-                    <h3 class="dest-card-name">${escapeHtml(dest.name)}</h3>
-                    <span class="dest-card-country">${escapeHtml(dest.country)}</span>
-                    <p class="dest-card-tagline">${escapeHtml(dest.tagline)}</p>
-                </div>
-                <div class="dest-card-bottom">
-                    <span class="dest-card-days">✨ Recommended: ${dest.ideal_days} Days</span>
-                    <span class="dest-card-cta">Select & Plan &rarr;</span>
+        if (!destinations || destinations.length === 0) {
+            destinationsGrid.innerHTML = `
+                <div class="empty-dest-search">
+                    <span class="empty-icon">🌍</span>
+                    <h4>No destinations matched your search</h4>
+                    <p>Try searching for another city, country, or vibe like "Beach", "Historic", or "Futuristic".</p>
                 </div>
             `;
-            card.addEventListener('click', () => {
-                destinationInput.value = dest.name;
-                durationDaysSlider.value = dest.ideal_days;
-                updateDurationDisplay(dest.ideal_days);
-                clearDestBtn.style.display = 'block';
-                document.getElementById('planner-section').scrollIntoView({ behavior: 'smooth' });
-                destinationInput.focus();
+            return;
+        }
+
+        destinations.forEach(dest => {
+            const card = document.createElement('div');
+            card.className = 'dest-card';
+            
+            // Build attractions badges
+            const attractionsHtml = (dest.popular_attractions || [])
+                .map(att => `<span class="attraction-pill">📍 ${escapeHtml(att)}</span>`)
+                .join('');
+
+            card.innerHTML = `
+                <div class="dest-card-image-wrap">
+                    <img 
+                        src="${escapeHtml(dest.image_url)}" 
+                        alt="${escapeHtml(dest.name)}, ${escapeHtml(dest.country)}"
+                        class="dest-card-img"
+                        loading="lazy"
+                        onerror="this.onerror=null; this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 600 400%22><rect fill=%22%230284c7%22 width=%22600%22 height=%22400%22/><text fill=%22white%22 x=%2250%%22 y=%2250%%22 font-family=%22sans-serif%22 font-size=%2228%22 text-anchor=%22middle%22>${escapeHtml(dest.name)}</text></svg>';"
+                    >
+                    <span class="dest-badge-continent">${escapeHtml(dest.continent || 'Global')}</span>
+                    <span class="dest-badge-vibe">${escapeHtml(dest.vibe || 'Travel')}</span>
+                </div>
+                <div class="dest-card-body">
+                    <div class="dest-card-header-row">
+                        <div>
+                            <h3 class="dest-card-name">${escapeHtml(dest.name)}</h3>
+                            <span class="dest-card-country">${escapeHtml(dest.country)}</span>
+                        </div>
+                        <span class="dest-ideal-days">🗓️ ${dest.ideal_days} Days</span>
+                    </div>
+                    <p class="dest-card-tagline">${escapeHtml(dest.tagline)}</p>
+                    <p class="dest-card-desc">${escapeHtml(dest.description)}</p>
+                    
+                    <div class="dest-attractions-wrap">
+                        <span class="attractions-label">Top Sights:</span>
+                        <div class="attractions-list">${attractionsHtml}</div>
+                    </div>
+                </div>
+                <div class="dest-card-bottom">
+                    <span class="dest-season">🌤️ Best: ${escapeHtml(dest.best_time || 'Year-round')}</span>
+                    <button type="button" class="btn btn-primary btn-sm select-dest-btn" data-dest="${escapeHtml(dest.name)}" data-days="${dest.ideal_days}">
+                        Plan Trip &rarr;
+                    </button>
+                </div>
+            `;
+
+            // Select & Populate Button
+            card.querySelector('.select-dest-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                selectDestination(dest.name, dest.ideal_days);
             });
+
+            // Clicking the card body also auto-fills
+            card.addEventListener('click', () => {
+                selectDestination(dest.name, dest.ideal_days);
+            });
+
             destinationsGrid.appendChild(card);
         });
     }
 
+    function selectDestination(name, days) {
+        destinationInput.value = name;
+        if (days) {
+            durationDaysSlider.value = days;
+            updateDurationDisplay(days);
+        }
+        clearDestBtn.style.display = 'block';
+        destFeedback.textContent = '';
+        document.getElementById('planner-section').scrollIntoView({ behavior: 'smooth' });
+        destinationInput.focus();
+        showToast(`Selected ${name} for your journey!`, '✈️');
+    }
+
+    // Destination Search Input Filter
+    if (destSearchInput) {
+        destSearchInput.addEventListener('input', (e) => {
+            const query = e.target.value.trim().toLowerCase();
+            filterDestinations(query, getActiveContinentFilter());
+        });
+    }
+
+    // Continent Filter Tabs
+    destTabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            destTabBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const filter = btn.getAttribute('data-filter');
+            const query = destSearchInput ? destSearchInput.value.trim().toLowerCase() : '';
+            filterDestinations(query, filter);
+        });
+    });
+
+    function getActiveContinentFilter() {
+        const activeBtn = document.querySelector('.dest-tab-btn.active');
+        return activeBtn ? activeBtn.getAttribute('data-filter') : 'all';
+    }
+
+    function filterDestinations(query, continent) {
+        let filtered = allDestinations;
+
+        if (continent && continent !== 'all') {
+            filtered = filtered.filter(d => (d.continent || '').toLowerCase() === continent.toLowerCase());
+        }
+
+        if (query) {
+            filtered = filtered.filter(d => 
+                d.name.toLowerCase().includes(query) ||
+                d.country.toLowerCase().includes(query) ||
+                (d.vibe && d.vibe.toLowerCase().includes(query)) ||
+                (d.tagline && d.tagline.toLowerCase().includes(query)) ||
+                (d.popular_attractions && d.popular_attractions.some(a => a.toLowerCase().includes(query)))
+            );
+        }
+
+        renderDestinationCards(filtered);
+    }
+
     // =========================================================================
-    // 2. Event Listeners & Form Controls
+    // 3. Form Event Listeners & Controls
     // =========================================================================
     function setupEventListeners() {
         // Mobile Navigation Toggle
@@ -174,13 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.addEventListener('click', () => {
                 const dest = btn.getAttribute('data-dest');
                 const days = btn.getAttribute('data-days');
-                destinationInput.value = dest;
-                clearDestBtn.style.display = 'block';
-                destFeedback.textContent = '';
-                if (days) {
-                    durationDaysSlider.value = days;
-                    updateDurationDisplay(days);
-                }
+                selectDestination(dest, days);
             });
         });
 
@@ -244,9 +372,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         saveTripBtn.addEventListener('click', saveCurrentTrip);
 
+        downloadPdfBtn.addEventListener('click', downloadItineraryPdf);
+
         printTripBtn.addEventListener('click', () => {
             window.print();
         });
+
+        if (resetMapBtn) {
+            resetMapBtn.addEventListener('click', recenterMap);
+        }
 
         // Modals
         openSavedTripsBtn.addEventListener('click', (e) => {
@@ -280,7 +414,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // =========================================================================
-    // 3. Form Submission & API Request Handling
+    // 4. Form Submission & Generation
     // =========================================================================
     async function handleFormSubmit(e) {
         if (e) e.preventDefault();
@@ -325,6 +459,15 @@ document.addEventListener('DOMContentLoaded', () => {
             resultsSection.style.display = 'block';
             resultsSection.scrollIntoView({ behavior: 'smooth' });
 
+            // Invalidate Leaflet Map layout after section becomes visible
+            setTimeout(() => {
+                if (leafletMapInstance) {
+                    leafletMapInstance.invalidateSize();
+                }
+            }, 300);
+
+            showToast(`Itinerary for ${result.destination} ready!`, '✨');
+
         } catch (error) {
             setLoadingState(false);
             alert(`Could not generate itinerary: ${error.message || 'Please check your inputs and try again.'}`);
@@ -336,7 +479,7 @@ document.addEventListener('DOMContentLoaded', () => {
             loadingSection.style.display = 'block';
             resultsSection.style.display = 'none';
             generateBtn.disabled = true;
-            generateBtn.querySelector('.btn-text').textContent = 'Generating Itinerary...';
+            generateBtn.querySelector('.btn-text').textContent = 'Synthesizing Itinerary...';
             generateBtn.querySelector('.btn-spinner').style.display = 'inline-block';
             loadingSection.scrollIntoView({ behavior: 'smooth' });
         } else {
@@ -348,7 +491,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // =========================================================================
-    // 4. Itinerary Rendering
+    // 5. Itinerary Rendering
     // =========================================================================
     function renderItinerary(data) {
         // Mode badge & explanation
@@ -360,10 +503,13 @@ document.addEventListener('DOMContentLoaded', () => {
         resultTripTitle.textContent = data.trip_title || `${data.duration_days}-Day Trip to ${data.destination}`;
         resultTripMeta.textContent = `📍 ${data.destination} • 🗓️ ${data.duration_days} Days • 👥 ${data.travelers_count} Traveler(s) • 💰 ${data.budget_tier} • ⚡ ${data.pace} Pace`;
 
+        // Live Weather Rendering
+        renderWeather(data.weather);
+
         // Overview Cards
         overviewText.textContent = data.trip_overview || 'Comprehensive itinerary curated for your travel preferences.';
-        bestTimeText.textContent = data.best_time_to_visit || 'Check local seasonal weather before your trip.';
-        packingText.textContent = data.packing_recommendations || 'Comfortable shoes, seasonal clothing, and standard travel gear.';
+        bestTimeText.textContent = data.best_time_to_visit || 'Check seasonal weather prior to travel.';
+        packingText.textContent = data.packing_recommendations || 'Comfortable shoes, versatile apparel, and travel essentials.';
 
         // Budget Breakdown
         const budget = data.budget_breakdown || {};
@@ -379,6 +525,9 @@ document.addEventListener('DOMContentLoaded', () => {
         budgetTransportTotal.textContent = `${sym}${(budget.transport_total || 0).toLocaleString()}`;
         budgetDisclaimerText.textContent = budget.disclaimer || 'Figures are rule-based approximations.';
 
+        // Render Leaflet Interactive Map
+        renderInteractiveMap(data);
+
         // Days Schedule Tabs & Content
         renderDaysSchedule(data.itinerary_days, sym);
 
@@ -393,6 +542,146 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // =========================================================================
+    // 6. Live Weather Widget (Open-Meteo)
+    // =========================================================================
+    function renderWeather(weather) {
+        if (!weather || !weather.is_available) {
+            weatherIcon.textContent = '🌤️';
+            weatherTemp.textContent = '--';
+            weatherCondition.textContent = weather ? (weather.message || 'Forecast unavailable') : 'Forecast unavailable';
+            weatherFeelsLike.textContent = 'Check local weather before travel';
+            weatherHumidity.textContent = '--%';
+            weatherWind.textContent = '-- km/h';
+            weatherRain.textContent = '--%';
+            forecastStrip.innerHTML = '<span class="forecast-empty">5-day outlook unavailable for this location</span>';
+            return;
+        }
+
+        const curr = weather.current || {};
+        weatherIcon.textContent = curr.icon || '☀️';
+        weatherTemp.textContent = curr.temperature_c !== undefined ? curr.temperature_c : '--';
+        weatherCondition.textContent = curr.condition || 'Clear';
+        weatherFeelsLike.textContent = `Feels like ${curr.feels_like_c !== undefined ? curr.feels_like_c : '--'}°C (${curr.temperature_f || '--'}°F)`;
+        weatherHumidity.textContent = `${curr.humidity || 0}%`;
+        weatherWind.textContent = `${curr.wind_speed_kmh || 0} km/h`;
+        weatherRain.textContent = `${Math.round((curr.precipitation_mm || 0) * 10)}%`;
+
+        // Render 5-day forecast strip
+        forecastStrip.innerHTML = '';
+        const daily = weather.daily_forecast || [];
+        daily.forEach(d => {
+            const dayName = new Date(d.date).toLocaleDateString('en-US', { weekday: 'short' });
+            const item = document.createElement('div');
+            item.className = 'forecast-day-item';
+            item.innerHTML = `
+                <span class="f-day">${dayName}</span>
+                <span class="f-icon">${d.icon}</span>
+                <span class="f-temp">${d.max_temp_c !== null ? d.max_temp_c : '--'}° <small>${d.min_temp_c !== null ? d.min_temp_c : '--'}°</small></span>
+            `;
+            forecastStrip.appendChild(item);
+        });
+    }
+
+    // =========================================================================
+    // 7. Interactive Leaflet Map
+    // =========================================================================
+    function renderInteractiveMap(data) {
+        const mapContainer = document.getElementById('travelMap');
+        if (!mapContainer || typeof L === 'undefined') return;
+
+        // Default or resolved coordinates
+        const coords = data.destination_coordinates || { lat: 48.8566, lon: 2.3522 };
+        const centerLat = coords.lat || 48.8566;
+        const centerLon = coords.lon || 2.3522;
+
+        // Initialize map instance if not existing
+        if (!leafletMapInstance) {
+            leafletMapInstance = L.map('travelMap').setView([centerLat, centerLon], 12);
+
+            // OpenStreetMap tile layer (Clean, standard, fast)
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(leafletMapInstance);
+
+            mapMarkersLayer = L.layerGroup().addTo(leafletMapInstance);
+        } else {
+            leafletMapInstance.setView([centerLat, centerLon], 12);
+            if (mapMarkersLayer) {
+                mapMarkersLayer.clearLayers();
+            }
+        }
+
+        // Add markers for all daily activities
+        const days = data.itinerary_days || [];
+        const markerPoints = [];
+
+        days.forEach(day => {
+            (day.activities || []).forEach(act => {
+                if (act.latitude && act.longitude) {
+                    const lat = act.latitude;
+                    const lon = act.longitude;
+                    markerPoints.push([lat, lon]);
+
+                    // Category color dot
+                    const cat = (act.category || '').toLowerCase();
+                    let color = '#0284c7';
+                    if (cat.includes('food')) color = '#e11d48';
+                    else if (cat.includes('culture') || cat.includes('heritage')) color = '#d97706';
+                    else if (cat.includes('nature') || cat.includes('adventure')) color = '#059669';
+
+                    // Custom SVG circle marker
+                    const customMarker = L.circleMarker([lat, lon], {
+                        radius: 8,
+                        fillColor: color,
+                        color: '#ffffff',
+                        weight: 2,
+                        opacity: 1,
+                        fillOpacity: 0.9
+                    });
+
+                    // Popup Content
+                    const popupContent = `
+                        <div class="map-popup-wrap">
+                            <span class="popup-day">Day ${day.day_number} • ${escapeHtml(act.time_slot || '')}</span>
+                            <h4 class="popup-title">${escapeHtml(act.activity_name || '')}</h4>
+                            <span class="popup-location">📍 ${escapeHtml(act.location || '')}</span>
+                            <p class="popup-desc">${escapeHtml(act.description || '')}</p>
+                            <div class="popup-meta">
+                                <span class="popup-cat">${escapeHtml(act.category || 'Sightseeing')}</span>
+                                <strong class="popup-cost">${escapeHtml(act.estimated_cost_display || '')}</strong>
+                            </div>
+                        </div>
+                    `;
+
+                    customMarker.bindPopup(popupContent);
+                    mapMarkersLayer.addLayer(customMarker);
+                }
+            });
+        });
+
+        // Fit map bounds to show all markers if multiple
+        if (markerPoints.length > 1) {
+            try {
+                const bounds = L.latLngBounds(markerPoints);
+                leafletMapInstance.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+            } catch (err) {
+                console.warn('Error adjusting map bounds:', err);
+            }
+        }
+    }
+
+    function recenterMap() {
+        if (!leafletMapInstance || !currentItinerary) return;
+        const coords = currentItinerary.destination_coordinates || { lat: 48.8566, lon: 2.3522 };
+        leafletMapInstance.setView([coords.lat, coords.lon], 12);
+        showToast('Map recentered to destination', '📍');
+    }
+
+    // =========================================================================
+    // 8. Day-by-Day Schedule & Tabs
+    // =========================================================================
     function renderDaysSchedule(days, currencySymbol) {
         dayFilterTabs.innerHTML = '';
         daysContainer.innerHTML = '';
@@ -478,7 +767,50 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // =========================================================================
-    // 5. Saved Trips (Local Storage)
+    // 9. PDF Download (html2pdf.js)
+    // =========================================================================
+    function downloadItineraryPdf() {
+        if (!currentItinerary) {
+            alert('No active itinerary to download.');
+            return;
+        }
+
+        const element = document.getElementById('printableItinerary');
+        if (!element) return;
+
+        showToast('Preparing your travel itinerary PDF...', '📥');
+
+        // Check if html2pdf is available
+        if (typeof html2pdf === 'undefined') {
+            window.print();
+            return;
+        }
+
+        // Temporarily hide actions bar during PDF capture
+        const actionsBar = document.getElementById('resultActionsBar');
+        const mapSection = document.getElementById('mapSectionCard');
+        if (actionsBar) actionsBar.style.display = 'none';
+
+        const opt = {
+            margin: [10, 10, 10, 10],
+            filename: `WanderPlan_${(currentItinerary.destination || 'Trip').replace(/\s+/g, '_')}_Itinerary.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true, logging: false },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        html2pdf().set(opt).from(element).save().then(() => {
+            if (actionsBar) actionsBar.style.display = 'flex';
+            showToast('PDF downloaded successfully!', '✅');
+        }).catch(err => {
+            console.error('PDF generation error:', err);
+            if (actionsBar) actionsBar.style.display = 'flex';
+            window.print();
+        });
+    }
+
+    // =========================================================================
+    // 10. Saved Trips (Local Storage)
     // =========================================================================
     function loadSavedTrips() {
         try {
@@ -504,18 +836,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const tripRecord = {
             id: 'trip_' + Date.now(),
-            savedAt: new Date().toLocaleDateString(),
+            savedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
             data: currentItinerary
         };
 
         savedTrips.unshift(tripRecord);
-        // Keep max 10
         if (savedTrips.length > 10) savedTrips.pop();
 
         try {
             localStorage.setItem('wanderplan_saved_trips', JSON.stringify(savedTrips));
             updateSavedTripsCount();
-            alert(`Trip to ${currentItinerary.destination} saved to your browser favorites!`);
+            showToast(`Trip to ${currentItinerary.destination} saved!`, '⭐');
         } catch (e) {
             alert('Could not save trip to browser storage.');
         }
@@ -524,7 +855,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderSavedTrips() {
         if (!savedTripsList) return;
         if (savedTrips.length === 0) {
-            savedTripsList.innerHTML = '<p class="empty-state">No saved itineraries yet. Plan a trip and click "Save Trip" to keep it here.</p>';
+            savedTripsList.innerHTML = '<p class="empty-state">No saved itineraries yet. Plan a trip and click "Save" to keep it here.</p>';
             return;
         }
 
@@ -536,7 +867,7 @@ document.addEventListener('DOMContentLoaded', () => {
             div.innerHTML = `
                 <div class="saved-trip-info">
                     <h4>${escapeHtml(trip.trip_title || trip.destination)}</h4>
-                    <span class="saved-trip-meta">📍 ${escapeHtml(trip.destination)} • ${trip.duration_days} Days • Saved on ${item.savedAt}</span>
+                    <span class="saved-trip-meta">📍 ${escapeHtml(trip.destination)} • ${trip.duration_days} Days • ${trip.budget_tier} • Saved on ${item.savedAt}</span>
                 </div>
                 <div class="saved-trip-actions">
                     <button class="btn btn-outline btn-sm load-trip-btn">View</button>
@@ -550,6 +881,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 savedTripsModal.style.display = 'none';
                 resultsSection.style.display = 'block';
                 resultsSection.scrollIntoView({ behavior: 'smooth' });
+                setTimeout(() => {
+                    if (leafletMapInstance) leafletMapInstance.invalidateSize();
+                }, 300);
             });
 
             div.querySelector('.delete-trip-btn').addEventListener('click', () => {
@@ -557,10 +891,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 localStorage.setItem('wanderplan_saved_trips', JSON.stringify(savedTrips));
                 updateSavedTripsCount();
                 renderSavedTrips();
+                showToast('Trip removed from favorites', '🗑️');
             });
 
             savedTripsList.appendChild(div);
         });
+    }
+
+    // =========================================================================
+    // 11. Toast Notifications
+    // =========================================================================
+    function showToast(message, icon = 'ℹ️') {
+        if (!toastNotification) return;
+        toastIcon.textContent = icon;
+        toastMessage.textContent = message;
+        toastNotification.style.display = 'flex';
+        toastNotification.classList.add('toast-visible');
+
+        setTimeout(() => {
+            toastNotification.classList.remove('toast-visible');
+            setTimeout(() => {
+                toastNotification.style.display = 'none';
+            }, 300);
+        }, 3000);
     }
 
     // Helper: Escape HTML to prevent XSS

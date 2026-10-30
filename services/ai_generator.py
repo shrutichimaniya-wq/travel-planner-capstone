@@ -1,8 +1,8 @@
 """
 AI Generator Service for TravelPlanner Capstone.
 Connects securely to Google Gemini API using server-side environment variables.
-Provides structured prompt engineering, JSON response formatting, and graceful
-fallback to Demo Mode when no API key is provided or when API errors occur.
+Provides structured prompt engineering, JSON response formatting, Leaflet map coordinates,
+live Open-Meteo weather integration, and graceful fallback to Demo Mode.
 """
 
 import os
@@ -11,19 +11,26 @@ import logging
 import requests
 from services.budget_calculator import calculate_budget_breakdown, CURRENCY_RATES
 from services.demo_generator import build_fallback_itinerary
+from services.weather_service import get_destination_weather, geocode_destination
 
 logger = logging.getLogger(__name__)
 
-# Primary and fallback Gemini models
+# Primary and fallback Gemini models (standard Google AI v1beta endpoints)
 GEMINI_MODELS = [
-    "gemini-2.5-flash",
-    "gemini-1.5-flash"
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-1.5-pro"
 ]
 
+def get_api_key() -> str:
+    """Retrieves the Gemini or Google API key from environment variables."""
+    key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or ""
+    return key.strip()
+
 def is_api_key_configured() -> bool:
-    """Checks whether a valid, non-placeholder GEMINI_API_KEY is present in the environment."""
-    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    placeholder_values = ["", "your_gemini_api_key_here", "your_api_key", "none"]
+    """Checks whether a valid, non-placeholder API key is present in the environment."""
+    api_key = get_api_key()
+    placeholder_values = ["", "your_gemini_api_key_here", "your_api_key", "none", "your_google_api_key_here"]
     return bool(api_key and api_key.lower() not in placeholder_values)
 
 
@@ -39,14 +46,20 @@ def generate_itinerary(
     """
     Main entry point for generating travel itineraries.
     Attempts live AI personalization via Gemini API; gracefully falls back to Demo Mode.
+    Includes coordinates for Leaflet Interactive Maps and Open-Meteo live weather data.
     """
     interests = interests or ["Culture & Heritage", "Food & Dining"]
     curr = currency.upper() if currency.upper() in CURRENCY_RATES else "USD"
     curr_info = CURRENCY_RATES[curr]
-    curr_rate = curr_info["rate"]
     curr_sym = curr_info["symbol"]
 
-    # 1. Check if Gemini API key is configured
+    # 1. Geocode destination for maps and weather
+    geo = geocode_destination(destination)
+    center_lat = geo["latitude"] if geo else 48.8566
+    center_lon = geo["longitude"] if geo else 2.3522
+    destination_coords = {"lat": center_lat, "lon": center_lon}
+
+    # 2. Check if Gemini API key is configured
     if not is_api_key_configured():
         logger.info("GEMINI_API_KEY not configured. Falling back to curated Demo Mode.")
         return build_fallback_itinerary(
@@ -59,18 +72,19 @@ def generate_itinerary(
             pace=pace
         )
 
-    api_key = os.environ.get("GEMINI_API_KEY").strip()
+    api_key = get_api_key()
 
-    # 2. Build structured prompt for Gemini
+    # 3. Build structured prompt for Gemini
     system_instruction = (
         "You are an expert travel consultant. Generate an authentic, realistic day-by-day travel itinerary. "
         "Adhere strictly to the requested pace, budget tier, and user interests. "
         "CRITICAL: Do not fabricate verified opening hours or guaranteed live prices. Label all costs as approximations. "
+        "Provide approximate latitude and longitude coordinates near the destination for each activity so they can be mapped on Leaflet. "
         "Output ONLY raw valid JSON conforming to the requested schema, without markdown formatting or code blocks."
     )
 
     user_prompt = f"""
-Create a detailed {duration_days}-day travel itinerary for {destination} with the following preferences:
+Create a detailed {duration_days}-day travel itinerary for {destination} (approx coordinates: {center_lat}, {center_lon}) with the following preferences:
 - Travelers: {travelers_count} person(s)
 - Budget Tier: {budget_tier}
 - Currency: {curr} ({curr_sym})
@@ -95,7 +109,9 @@ Return a valid JSON object matching this exact structure:
           "description": "2-3 sentences explaining what makes this memorable and practical tips",
           "location": "District or specific neighborhood",
           "category": "Culture, Food, Adventure, Nature, Sightseeing, or Relaxation",
-          "estimated_cost_local": 25
+          "estimated_cost_local": 25,
+          "latitude": {center_lat},
+          "longitude": {center_lon}
         }}
       ]
     }}
@@ -104,6 +120,7 @@ Return a valid JSON object matching this exact structure:
 
 Provide activities for each day: Morning, Afternoon, Evening, and Night (if fast-paced, include Night; if relaxed, keep it to 3 activities per day).
 All activity costs in 'estimated_cost_local' must be realistic integer approximations in {curr}.
+Ensure latitude and longitude for each activity are numbers close to the destination ({center_lat}, {center_lon}).
 """
 
     payload = {
@@ -114,13 +131,13 @@ All activity costs in 'estimated_cost_local' must be realistic integer approxima
             }
         ],
         "generationConfig": {
-            "temperature": 0.4,
+            "temperature": 0.35,
             "topP": 0.95,
             "responseMimeType": "application/json"
         }
     }
 
-    # 3. Call Gemini REST API
+    # 4. Call Gemini REST API across fallback models
     last_error_msg = None
     for model_name in GEMINI_MODELS:
         endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
@@ -144,13 +161,19 @@ All activity costs in 'estimated_cost_local' must be realistic integer approxima
                 # Parse JSON
                 parsed_itinerary = json.loads(raw_text)
 
-                # Format activities with formatted currency display
+                # Format activities with formatted currency display and valid coordinates
                 for day in parsed_itinerary.get("itinerary_days", []):
                     for act in day.get("activities", []):
                         cost_num = act.get("estimated_cost_local", 0)
                         act["estimated_cost_raw"] = cost_num
                         act["estimated_cost_display"] = f"{curr_sym}{cost_num:,}"
                         act["unverified_notice"] = "Estimated activity cost; verify local opening hours and ticket availability before visiting."
+                        
+                        # Ensure coordinates exist
+                        if "latitude" not in act or not isinstance(act["latitude"], (int, float)):
+                            act["latitude"] = center_lat
+                        if "longitude" not in act or not isinstance(act["longitude"], (int, float)):
+                            act["longitude"] = center_lon
 
                 # Calculate itemized budget
                 budget_breakdown = calculate_budget_breakdown(
@@ -162,6 +185,9 @@ All activity costs in 'estimated_cost_local' must be realistic integer approxima
                     pace=pace
                 )
 
+                # Fetch live weather data
+                weather_data = get_destination_weather(destination)
+
                 return {
                     "status": "success",
                     "is_demo": False,
@@ -171,6 +197,7 @@ All activity costs in 'estimated_cost_local' must be realistic integer approxima
                     "mode_explanation": "This personalized itinerary was dynamically synthesized in real-time by Google Gemini AI according to your custom preferences.",
                     "trip_title": parsed_itinerary.get("trip_title", f"{duration_days}-Day Journey to {destination.title()}"),
                     "destination": destination.title(),
+                    "destination_coordinates": destination_coords,
                     "duration_days": duration_days,
                     "travelers_count": travelers_count,
                     "budget_tier": budget_tier.capitalize(),
@@ -180,10 +207,11 @@ All activity costs in 'estimated_cost_local' must be realistic integer approxima
                     "packing_recommendations": parsed_itinerary.get("packing_recommendations", ""),
                     "itinerary_days": parsed_itinerary.get("itinerary_days", []),
                     "budget_breakdown": budget_breakdown,
+                    "weather": weather_data,
                     "disclaimers": [
                         "All pricing, entrance fees, and meal costs are approximations for planning purposes only.",
                         "Opening hours, availability, and public transit schedules change seasonally; always confirm directly with local providers.",
-                        "Live weather, bookings, and ticket availability are not guaranteed in this itinerary estimate."
+                        "Live weather is powered by Open-Meteo. Actual meteorological conditions may vary."
                     ]
                 }
             else:

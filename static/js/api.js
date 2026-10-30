@@ -1,6 +1,6 @@
 /**
  * WanderPlan AI - API Client Module
- * Communicates with backend Flask endpoints.
+ * Communicates with backend Flask endpoints for itineraries, destinations, and weather.
  */
 
 const API = {
@@ -24,17 +24,36 @@ const API = {
     },
 
     /**
-     * Fetches curated popular sample destinations.
+     * Fetches curated popular sample destinations with optional search filtering.
      */
-    async getSampleDestinations() {
+    async getSampleDestinations(query = '') {
         try {
-            const res = await fetch('/api/sample-destinations');
-            if (!res.ok) throw new Error(`Failed to fetch samples: HTTP ${res.status}`);
+            const url = query ? `/api/sample-destinations?q=${encodeURIComponent(query)}` : '/api/sample-destinations';
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`Failed to fetch destinations: HTTP ${res.status}`);
             const data = await res.json();
             return data.destinations || [];
         } catch (err) {
             console.error('Failed to load sample destinations:', err);
             return [];
+        }
+    },
+
+    /**
+     * Fetches real-time weather from Open-Meteo for a given destination.
+     */
+    async getWeather(destination) {
+        try {
+            const res = await fetch(`/api/weather?destination=${encodeURIComponent(destination)}`);
+            if (!res.ok) throw new Error(`Failed to fetch weather: HTTP ${res.status}`);
+            return await res.json();
+        } catch (err) {
+            console.error('Weather request failed:', err);
+            return {
+                status: 'unavailable',
+                is_available: False,
+                message: 'Live weather service unreachable.'
+            };
         }
     },
 

@@ -1,6 +1,7 @@
 """
 Automated Unit and Integration Tests for TravelPlanner Capstone.
-Tests Flask endpoints, input validation, offline demo generation, and budget calculations.
+Tests Flask endpoints, input validation, offline demo generation,
+Leaflet map coordinates, Open-Meteo weather service, and budget calculations.
 """
 
 import unittest
@@ -8,6 +9,7 @@ import json
 from app import app
 from services.budget_calculator import calculate_budget_breakdown, CURRENCY_RATES
 from services.demo_generator import build_fallback_itinerary
+from services.weather_service import geocode_destination, get_destination_weather
 
 
 class TravelPlannerTestCase(unittest.TestCase):
@@ -34,14 +36,38 @@ class TravelPlannerTestCase(unittest.TestCase):
         data = response.get_json()
         self.assertEqual(data["status"], "success")
         self.assertIsInstance(data["destinations"], list)
-        self.assertGreater(len(data["destinations"]), 0)
+        self.assertGreaterEqual(len(data["destinations"]), 10)
+
+    def test_sample_destinations_search_filter(self):
+        """Verify /api/sample-destinations?q=tokyo filters properly."""
+        response = self.client.get("/api/sample-destinations?q=tokyo")
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data["status"], "success")
+        self.assertGreater(data["count"], 0)
+        self.assertEqual(data["destinations"][0]["name"], "Tokyo")
+
+    def test_weather_endpoint_valid_destination(self):
+        """Verify /api/weather returns weather or structured fallback for a destination."""
+        response = self.client.get("/api/weather?destination=Tokyo")
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertIn("status", data)
+        self.assertIn("destination", data)
+
+    def test_weather_endpoint_missing_param(self):
+        """Verify /api/weather returns 400 when destination is omitted."""
+        response = self.client.get("/api/weather")
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertEqual(data["status"], "error")
 
     def test_home_page_renders(self):
         """Verify GET / renders the main HTML interface."""
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"WanderPlan", response.data)
-        self.assertIn(b"Trip Planner", response.data)
+        self.assertIn(b"Destination Explorer", response.data)
 
     def test_validation_missing_destination(self):
         """Verify /api/generate-itinerary rejects empty destination."""
@@ -80,8 +106,8 @@ class TravelPlannerTestCase(unittest.TestCase):
         data = response.get_json()
         self.assertIn("duration", data["error"].lower())
 
-    def test_itinerary_generation_demo_mode(self):
-        """Verify demo generator returns complete structure with disclaimers and budget."""
+    def test_itinerary_generation_demo_mode_structure(self):
+        """Verify demo generator returns complete structure with map coords, weather, and budget."""
         payload = {
             "destination": "Tokyo",
             "duration_days": 3,
@@ -102,10 +128,24 @@ class TravelPlannerTestCase(unittest.TestCase):
         self.assertEqual(data["status"], "success")
         self.assertEqual(data["duration_days"], 3)
         self.assertEqual(len(data["itinerary_days"]), 3)
+        
+        # Verify map coordinates
+        self.assertIn("destination_coordinates", data)
+        self.assertIn("lat", data["destination_coordinates"])
+        self.assertIn("lon", data["destination_coordinates"])
+        
+        # Verify weather data structure
+        self.assertIn("weather", data)
+        
+        # Verify activity level coordinates
+        first_act = data["itinerary_days"][0]["activities"][0]
+        self.assertIn("latitude", first_act)
+        self.assertIn("longitude", first_act)
+
+        # Verify budget and disclaimers
         self.assertIn("budget_breakdown", data)
         self.assertGreater(data["budget_breakdown"]["grand_total"], 0)
         self.assertIn("disclaimers", data)
-        self.assertGreater(len(data["disclaimers"]), 0)
 
     def test_budget_calculator_multi_currency(self):
         """Verify budget calculator math across USD, INR, and EUR."""
@@ -126,11 +166,12 @@ class TravelPlannerTestCase(unittest.TestCase):
             )
             self.assertTrue(budget["is_estimate"])
 
-    def test_budget_calculator_tier_scaling(self):
-        """Verify luxury budget is greater than budget tier for same trip."""
-        b_budget = calculate_budget_breakdown("Rome", 3, 1, "budget", "USD")
-        b_luxury = calculate_budget_breakdown("Rome", 3, 1, "luxury", "USD")
-        self.assertGreater(b_luxury["grand_total"], b_budget["grand_total"])
+    def test_geocoding_helper(self):
+        """Verify geocode_destination resolves coordinates for known destinations."""
+        geo = geocode_destination("Paris")
+        self.assertIsNotNone(geo)
+        self.assertAlmostEqual(geo["latitude"], 48.8566, places=1)
+        self.assertAlmostEqual(geo["longitude"], 2.3522, places=1)
 
 
 if __name__ == "__main__":

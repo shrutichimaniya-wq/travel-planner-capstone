@@ -8,10 +8,15 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet Interactive Maps CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    
     <!-- Main Stylesheet -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <!-- Favicon / Meta -->
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%3E%3Ctext y=%2226%22 font-size=%2224%22>✈️</text></svg>">
+    
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%200%20100%20100%22><text y=%22.9em%22 font-size=%2290%22>✈️</text></svg>">
 </head>
 <body>
 
@@ -25,7 +30,7 @@
 
             <nav class="nav-menu" id="navMenu">
                 <a href="#planner-section" class="nav-link">Trip Planner</a>
-                <a href="#destinations-section" class="nav-link">Popular Destinations</a>
+                <a href="#destinations-section" class="nav-link">Explore Destinations</a>
                 <a href="#saved-trips-modal" class="nav-link" id="openSavedTripsBtn">Saved Trips <span class="badge-count" id="savedTripsCount">0</span></a>
                 <a href="#capstone-modal" class="nav-link" id="openCapstoneModalBtn">Capstone Info</a>
             </nav>
@@ -49,15 +54,15 @@
             <div class="hero-overlay"></div>
             <div class="hero-content">
                 <div class="hero-badge">
-                    <span>✨ AI-Powered Personalized Travel Planning</span>
+                    <span>✨ Google Cloud Generative AI Capstone • Skill Wallet</span>
                 </div>
                 <h1 class="hero-title">Your Next Journey,<br><span class="hero-gradient">Tailored to Perfection</span></h1>
                 <p class="hero-subtitle">
-                    Generate intelligent, day-by-day customized travel itineraries designed around your budget, interests, pace, and travel companions in seconds.
+                    Generate personalized day-by-day itineraries with live Open-Meteo weather forecasts, Leaflet interactive maps, and smart multi-currency budget breakdowns in seconds.
                 </p>
                 <div class="hero-actions">
                     <a href="#planner-section" class="btn btn-primary btn-lg">Plan My Trip Now 🚀</a>
-                    <a href="#destinations-section" class="btn btn-secondary btn-lg">Explore Sample Destinations</a>
+                    <a href="#destinations-section" class="btn btn-secondary btn-lg">Explore 12+ Destinations 🌍</a>
                 </div>
 
                 <!-- Live Quick Stats -->
@@ -67,8 +72,12 @@
                         <span class="stat-label">Personalized Routes</span>
                     </div>
                     <div class="stat-item">
-                        <span class="stat-number">Multi-Day</span>
-                        <span class="stat-label">Daily Budget Estimates</span>
+                        <span class="stat-number">Live</span>
+                        <span class="stat-label">Open-Meteo Weather</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number">Interactive</span>
+                        <span class="stat-label">Leaflet OSM Maps</span>
                     </div>
                     <div class="stat-item">
                         <span class="stat-number">7+</span>
@@ -78,12 +87,12 @@
             </div>
         </section>
 
-        <!-- Mode Notification Banner (if running in Demo mode) -->
+        <!-- System Banner (Visible in Demo mode) -->
         <div class="system-banner {{ '' if api_configured else 'banner-visible' }}" id="systemBanner">
             <div class="banner-inner">
                 <div class="banner-icon">💡</div>
                 <div class="banner-text">
-                    <strong>Demo Mode Active:</strong> You are using our offline curated itinerary database. To enable real-time Gemini AI generation, provide a free <code>GEMINI_API_KEY</code> in your server's <code>.env</code> file.
+                    <strong>Demo Mode Active:</strong> You are using our offline curated itinerary database. To enable real-time Gemini AI generation, provide your free <code>GEMINI_API_KEY</code> in the server's <code>.env</code> file.
                 </div>
                 <button class="banner-close" id="closeBannerBtn" aria-label="Dismiss banner">&times;</button>
             </div>
@@ -93,9 +102,9 @@
         <section class="planner-section" id="planner-section">
             <div class="section-container">
                 <div class="section-header text-center">
-                    <span class="section-eyebrow">Custom Preferences</span>
+                    <span class="section-eyebrow">Smart Customization</span>
                     <h2 class="section-title">Design Your Ideal Itinerary</h2>
-                    <p class="section-desc">Fill in your travel preferences below. Our engine will synthesize an authentic day-by-day plan with estimated expenses.</p>
+                    <p class="section-desc">Customize your travel style, party size, pace, and interests. Our engine will synthesize an authentic day-by-day plan with estimated expenses.</p>
                 </div>
 
                 <div class="planner-card">
@@ -112,7 +121,7 @@
                                     id="destinationInput" 
                                     name="destination" 
                                     class="form-control" 
-                                    placeholder="e.g., Tokyo, Paris, Bali, Rome, Goa, New York..." 
+                                    placeholder="e.g., Tokyo, Paris, Bali, Rome, Goa, New York, London, Dubai, Jaipur..." 
                                     required
                                     minlength="2"
                                     maxlength="80"
@@ -127,7 +136,9 @@
                                 <button type="button" class="chip-btn" data-dest="Bali" data-days="6">Bali 🇮🇩</button>
                                 <button type="button" class="chip-btn" data-dest="Goa" data-days="4">Goa 🇮🇳</button>
                                 <button type="button" class="chip-btn" data-dest="Rome" data-days="4">Rome 🇮🇹</button>
-                                <button type="button" class="chip-btn" data-dest="New York City" data-days="5">New York 🇺🇸</button>
+                                <button type="button" class="chip-btn" data-dest="London" data-days="5">London 🇬🇧</button>
+                                <button type="button" class="chip-btn" data-dest="Dubai" data-days="4">Dubai 🇦🇪</button>
+                                <button type="button" class="chip-btn" data-dest="Jaipur" data-days="3">Jaipur 🇮🇳</button>
                             </div>
                             <div class="form-feedback" id="destFeedback"></div>
                         </div>
@@ -287,14 +298,14 @@
                             <div class="form-feedback" id="interestsFeedback"></div>
                         </div>
 
-                        <!-- Submit Button & Loader -->
+                        <!-- Submit Button -->
                         <div class="form-actions text-center">
                             <button type="submit" class="btn btn-primary btn-xl" id="generateBtn">
                                 <span class="btn-text">✨ Generate Personalized Itinerary</span>
                                 <span class="btn-spinner" style="display: none;"></span>
                             </button>
                             <p class="form-footnote">
-                                🔒 Secure server-side processing • Clear unverified estimate disclosures • Instant generation
+                                🔒 Secure server-side processing • Live Open-Meteo weather • Leaflet interactive map • Instant generation
                             </p>
                         </div>
                     </form>
@@ -306,8 +317,8 @@
         <section class="loading-section" id="loadingSection" style="display: none;">
             <div class="section-container text-center">
                 <div class="spinner-large"></div>
-                <h3 class="loading-title" id="loadingTitle">Crafting Your Personalized Itinerary...</h3>
-                <p class="loading-subtitle" id="loadingSubtitle">Synthesizing local landmarks, calculating budget approximations, and scheduling daily routes.</p>
+                <h3 class="loading-title" id="loadingTitle">Synthesizing Your Travel Journey...</h3>
+                <p class="loading-subtitle" id="loadingSubtitle">Consulting destination intelligence, fetching live Open-Meteo weather, and mapping daily routes.</p>
                 <div class="skeleton-cards">
                     <div class="skeleton-card skeleton-pulse"></div>
                     <div class="skeleton-card skeleton-pulse"></div>
@@ -318,7 +329,7 @@
 
         <!-- Results / Itinerary Presentation Section -->
         <section class="results-section" id="resultsSection" style="display: none;">
-            <div class="section-container">
+            <div class="section-container" id="printableItinerary">
                 
                 <!-- Result Header & Actions Toolbar -->
                 <div class="result-header-card">
@@ -332,18 +343,21 @@
                             <p class="result-trip-meta" id="resultTripMeta">Destination • Duration • Travelers</p>
                         </div>
 
-                        <div class="result-actions-bar">
+                        <div class="result-actions-bar" id="resultActionsBar">
                             <button class="btn btn-outline" id="editPreferencesBtn" title="Modify your preferences">
-                                ✏️ Edit Preferences
+                                ✏️ Edit
                             </button>
                             <button class="btn btn-outline" id="regenerateBtn" title="Regenerate this itinerary">
                                 🔄 Regenerate
                             </button>
                             <button class="btn btn-outline" id="saveTripBtn" title="Save trip to browser favorites">
-                                ⭐ Save Trip
+                                ⭐ Save
                             </button>
-                            <button class="btn btn-primary" id="printTripBtn" title="Print or save as PDF">
-                                🖨️ Print / PDF
+                            <button class="btn btn-secondary" id="downloadPdfBtn" title="Download well-formatted PDF">
+                                📥 Download PDF
+                            </button>
+                            <button class="btn btn-primary" id="printTripBtn" title="Print document">
+                                🖨️ Print
                             </button>
                         </div>
                     </div>
@@ -355,8 +369,46 @@
                     </div>
                 </div>
 
-                <!-- Trip Overview & Practical Information -->
+                <!-- Live Weather Widget & Trip Overview Cards -->
                 <div class="overview-grid">
+                    <!-- Live Weather Card -->
+                    <div class="overview-card weather-card" id="weatherCard">
+                        <div class="card-header-icon" id="weatherIcon">🌤️</div>
+                        <div class="weather-header-wrap">
+                            <h3>Live Destination Weather</h3>
+                            <span class="weather-badge-pill" id="weatherSourceBadge">Open-Meteo Live</span>
+                        </div>
+                        <div class="weather-current-wrap" id="weatherCurrentWrap">
+                            <div class="weather-temp-main">
+                                <span class="temp-val" id="weatherTemp">--</span>
+                                <span class="temp-unit">°C</span>
+                            </div>
+                            <div class="weather-details">
+                                <span class="weather-condition" id="weatherCondition">Loading weather...</span>
+                                <span class="weather-sub" id="weatherFeelsLike">Feels like --°C</span>
+                            </div>
+                        </div>
+                        <div class="weather-stats-row" id="weatherStatsRow">
+                            <div class="w-stat">
+                                <span class="w-stat-label">Humidity</span>
+                                <strong id="weatherHumidity">--%</strong>
+                            </div>
+                            <div class="w-stat">
+                                <span class="w-stat-label">Wind</span>
+                                <strong id="weatherWind">-- km/h</strong>
+                            </div>
+                            <div class="w-stat">
+                                <span class="w-stat-label">Rain Prob</span>
+                                <strong id="weatherRain">--%</strong>
+                            </div>
+                        </div>
+                        <!-- Mini 5-Day Forecast -->
+                        <div class="forecast-strip" id="forecastStrip">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Overview & Best Time -->
                     <div class="overview-card main-overview">
                         <div class="card-header-icon">🧭</div>
                         <h3>Trip Overview</h3>
@@ -364,23 +416,41 @@
                     </div>
 
                     <div class="overview-card">
-                        <div class="card-header-icon">🌤️</div>
-                        <h3>Best Time to Visit</h3>
-                        <p id="bestTimeText">Seasonal recommendations...</p>
-                    </div>
-
-                    <div class="overview-card">
                         <div class="card-header-icon">🎒</div>
-                        <h3>Packing Checklist</h3>
-                        <p id="packingText">Packing suggestions...</p>
+                        <h3>Best Time & Packing</h3>
+                        <p><strong>Best Time:</strong> <span id="bestTimeText">Season...</span></p>
+                        <p class="mt-2"><strong>Packing Checklist:</strong> <span id="packingText">Gear...</span></p>
                     </div>
                 </div>
 
-                <!-- Estimated Budget Breakdown Card -->
+                <!-- Interactive Travel Map (Leaflet.js + OpenStreetMap) -->
+                <div class="map-section-card" id="mapSectionCard">
+                    <div class="map-header">
+                        <div class="map-title-wrap">
+                            <span class="map-icon">🗺️</span>
+                            <div>
+                                <h3>Interactive Travel Map</h3>
+                                <p class="map-sub">Visualizing recommended activities and attractions across OpenStreetMap</p>
+                            </div>
+                        </div>
+                        <div class="map-actions">
+                            <button type="button" class="btn btn-outline btn-sm" id="resetMapBtn">📍 Recenter Map</button>
+                        </div>
+                    </div>
+                    <div id="travelMap" class="travel-map-container"></div>
+                    <div class="map-legend">
+                        <span class="legend-item"><span class="legend-dot dot-culture"></span> Culture & Heritage</span>
+                        <span class="legend-item"><span class="legend-dot dot-food"></span> Food & Dining</span>
+                        <span class="legend-item"><span class="legend-dot dot-sightseeing"></span> Sightseeing & Nature</span>
+                        <span class="legend-item"><span class="legend-dot dot-adventure"></span> Adventure & Leisure</span>
+                    </div>
+                </div>
+
+                <!-- Smart Estimated Budget Breakdown Card -->
                 <div class="budget-breakdown-card" id="budgetBreakdownCard">
                     <div class="budget-card-header">
                         <div>
-                            <span class="budget-label">Estimated Trip Budget Breakdown</span>
+                            <span class="budget-label">Smart Estimated Budget Breakdown</span>
                             <div class="budget-grand-total">
                                 <span class="currency-symbol" id="budgetCurrencySym">$</span>
                                 <span class="total-amount" id="budgetGrandTotal">0</span>
@@ -451,25 +521,47 @@
                     </div>
                     <ul class="disclaimer-list" id="disclaimerList">
                         <li>All costs, timings, and schedules are approximate estimates synthesized for trip planning and budgeting.</li>
-                        <li>Live ticket availability, real-time weather conditions, and seasonal operating hours are unverified and must be confirmed directly with local authorities or venues.</li>
-                        <li>Prices and transit routes are subject to currency fluctuations, local holidays, and seasonal variations.</li>
+                        <li>Live ticket availability and seasonal operating hours are unverified and must be confirmed directly with local authorities or venues.</li>
+                        <li>Live weather is retrieved from the Open-Meteo forecasting model; actual real-time conditions may vary.</li>
                     </ul>
                 </div>
 
             </div>
         </section>
 
-        <!-- Popular Sample Destinations Section -->
+        <!-- Destination Explorer Section -->
         <section class="destinations-section" id="destinations-section">
             <div class="section-container">
                 <div class="section-header text-center">
-                    <span class="section-eyebrow">Inspiration</span>
-                    <h2 class="section-title">Popular Destinations</h2>
-                    <p class="section-desc">Click any destination card below to immediately populate your trip planner.</p>
+                    <span class="section-eyebrow">Explore the World</span>
+                    <h2 class="section-title">Destination Explorer</h2>
+                    <p class="section-desc">Discover curated travel destinations with high-resolution photography, top attractions, and recommended trip lengths.</p>
                 </div>
 
+                <!-- Destination Search and Filter Bar -->
+                <div class="destination-filter-bar">
+                    <div class="search-input-wrap">
+                        <span class="search-icon">🔍</span>
+                        <input 
+                            type="text" 
+                            id="destSearchInput" 
+                            class="dest-search-input" 
+                            placeholder="Search destinations by name, country, or vibe (e.g. Paris, Japan, Beach, Heritage)..."
+                            aria-label="Search destinations"
+                        >
+                    </div>
+                    <div class="dest-filter-tabs" id="destFilterTabs">
+                        <button type="button" class="dest-tab-btn active" data-filter="all">All Destinations</button>
+                        <button type="button" class="dest-tab-btn" data-filter="Asia">Asia</button>
+                        <button type="button" class="dest-tab-btn" data-filter="Europe">Europe</button>
+                        <button type="button" class="dest-tab-btn" data-filter="Americas">Americas</button>
+                        <button type="button" class="dest-tab-btn" data-filter="Middle East">Middle East</button>
+                    </div>
+                </div>
+
+                <!-- Dynamic Destination Cards Grid -->
                 <div class="destinations-grid" id="destinationsGrid">
-                    <!-- Populated dynamically via /api/sample-destinations -->
+                    <!-- Populated dynamically from API -->
                 </div>
             </div>
         </section>
@@ -483,7 +575,7 @@
                 <button class="modal-close" id="closeSavedTripsModalBtn">&times;</button>
             </div>
             <div class="modal-body" id="savedTripsList">
-                <p class="empty-state">No saved itineraries yet. Generate a trip and click "Save Trip" to store it locally in your browser.</p>
+                <p class="empty-state">No saved itineraries yet. Generate a trip and click "Save" to keep it stored in your browser.</p>
             </div>
         </div>
     </div>
@@ -497,23 +589,30 @@
             </div>
             <div class="modal-body">
                 <div class="capstone-info-content">
-                    <h4>Personalized Travel Itinerary Planner</h4>
-                    <p><strong>Program:</strong> B.Tech Capstone Project for Skill Wallet</p>
-                    <p><strong>Architecture:</strong> Python (Flask REST API) + Responsive HTML5/CSS3/Vanilla JS + Google Gemini AI Engine.</p>
+                    <h4>WanderPlan AI – Personalized AI Travel Itinerary Planner</h4>
+                    <p><strong>Capstone Program:</strong> Skill Wallet Generative AI with Google Cloud Virtual Internship</p>
+                    <p><strong>Architecture:</strong> Python Flask REST backend, Google Gemini API, Open-Meteo Weather API, Leaflet.js OpenStreetMap engine, and Vercel Serverless Hosting.</p>
                     
-                    <h5>Key Engineering Principles:</h5>
+                    <h5>Core Engineering & Responsible AI Principles:</h5>
                     <ul>
-                        <li><strong>Secure API Key Handling:</strong> Gemini API keys are strictly kept on the server inside <code>.env</code> and never exposed to the client.</li>
-                        <li><strong>Transparent Demo Fallback:</strong> If no API key is provided, the application runs on a curated offline database and clearly labels itself as "Demo Mode".</li>
-                        <li><strong>Input Validation:</strong> Server-side bounds checking for trip duration (1-14 days), travelers (1-20), and sanitized destination names.</li>
-                        <li><strong>Responsible AI:</strong> Activity costs and schedules are clearly badged as unverified estimates to prevent user misinformation.</li>
+                        <li><strong>Server-Side Secret Management:</strong> <code>GEMINI_API_KEY</code> is kept strictly on the backend and never exposed to the browser.</li>
+                        <li><strong>Graceful Demo Fallback:</strong> When an API key is missing or quota is exceeded, the application transparently activates its curated offline database with a clear "Demo Mode" label.</li>
+                        <li><strong>Live Weather Integration:</strong> Connects to Open-Meteo for real-time temperature, humidity, and daily weather outlooks.</li>
+                        <li><strong>Geospatial Map Visualization:</strong> Plots verified destination landmarks and attractions on OpenStreetMap using Leaflet.</li>
+                        <li><strong>Multi-Format Exports:</strong> Supports direct PDF downloads via <code>html2pdf.js</code> and print layouts.</li>
                     </ul>
 
-                    <h5>Local Windows Run:</h5>
+                    <h5>Local Execution:</h5>
                     <code>python app.py</code>
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Toast Notification Element -->
+    <div class="toast-notification" id="toastNotification" style="display: none;">
+        <span class="toast-icon" id="toastIcon">ℹ️</span>
+        <span class="toast-message" id="toastMessage">Notification message</span>
     </div>
 
     <!-- Footer -->
@@ -524,20 +623,20 @@
                     <span class="brand-icon">✈️</span>
                     <span class="brand-text">WanderPlan<span class="brand-accent">.AI</span></span>
                 </div>
-                <p class="footer-tagline">Intelligent, personalized travel itinerary planning for modern explorers.</p>
+                <p class="footer-tagline">Intelligent, personalized travel itinerary planning powered by Google Cloud Generative AI and Open-Meteo.</p>
             </div>
             <div class="footer-col">
-                <h5>Capstone Tech Stack</h5>
+                <h5>Integrated APIs & Tech</h5>
                 <ul class="footer-links">
+                    <li>Google Gemini Generative AI</li>
+                    <li>Open-Meteo Real-Time Weather</li>
+                    <li>Leaflet & OpenStreetMap Engine</li>
                     <li>Python 3.14 & Flask 3.1</li>
-                    <li>Google Gemini AI REST Engine</li>
-                    <li>HTML5 Semantic Architecture</li>
-                    <li>Responsive CSS3 Variables</li>
                 </ul>
             </div>
             <div class="footer-col">
-                <h5>Skill Wallet Capstone</h5>
-                <p class="footer-copy">Designed for B.Tech Capstone Submission • Responsive Mobile/Tablet/Desktop Layout</p>
+                <h5>Skill Wallet Internship</h5>
+                <p class="footer-copy">Generative AI with Google Cloud Virtual Internship • Responsive Mobile/Tablet/Desktop Layout</p>
             </div>
         </div>
         <div class="footer-bottom text-center">
@@ -545,7 +644,13 @@
         </div>
     </footer>
 
-    <!-- Scripts -->
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- html2pdf.js for 1-Click Client-Side PDF Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <!-- Client Scripts -->
     <script src="{{ url_for('static', filename='js/api.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
